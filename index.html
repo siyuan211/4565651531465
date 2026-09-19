@@ -36,6 +36,13 @@
       </ol>
     </section>
 
+    <section class="board">
+      <h2>👥 优秀小组</h2>
+      <ol class="rank-list" id="rankGroup">
+        <li class="empty">暂无数据</li>
+      </ol>
+    </section>
+
     <!-- ===== 签名版 ===== -->
     <section class="board">
       <h2>✍️ 签名版</h2>
@@ -67,6 +74,10 @@
         <div id="improveEditor"></div>
         <button id="btnAddImprove" class="btn btn-add">＋ 添加名字</button>
 
+        <h3>👥 优秀小组(两个)</h3>
+        <div id="groupEditor"></div>
+        <button id="btnAddGroup" class="btn btn-add">＋ 添加小组</button>
+
         <div class="save-row">
           <button id="btnSaveGit" class="btn btn-primary">💾 保存到 GitHub</button>
           <span class="save-tip">修改榜单后需点此保存,全班才看得到</span>
@@ -89,9 +100,9 @@
       </div>
       <div class="btn-row">
         <button id="btnClearCanvas" class="btn btn-ghost">清除</button>
+        <button id="btnDeleteSign" class="btn btn-danger" hidden>🗑 删除签名</button>
         <button id="btnSaveSign" class="btn btn-primary">✅ 签名领奖</button>
-      </div>
-    </div>
+      </div>    </div>
   </div>
 
   <script src="config.js"></script>
