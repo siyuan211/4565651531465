@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>高一3班 · 光荣榜</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- ===== 顶部横幅 ===== -->
+  <header class="banner">
+    <h1>🏆 高一3班 · 光荣榜</h1>
+    <p>签完名 · 领奖啦</p>
+  </header>
+
+  <!-- ===== 教师管理入口 ===== -->
+  <div class="toolbar">
+    <span id="saveStatus" class="save-status">加载中…</span>
+    <button id="btnAdmin" class="btn btn-ghost">🔒 教师管理</button>
+    <span id="adminBadge" class="badge" hidden>教师模式已开启</span>
+  </div>
+
+  <!-- ===== 榜单区 ===== -->
+  <main class="container">
+    <section class="board">
+      <h2>🥇 考试总分前三</h2>
+      <ol class="rank-list" id="rankTop3">
+        <li class="empty">暂无数据</li>
+      </ol>
+    </section>
+
+    <section class="board">
+      <h2>🚀 进步前三</h2>
+      <ol class="rank-list" id="rankImprove">
+        <li class="empty">暂无数据</li>
+      </ol>
+    </section>
+
+    <!-- ===== 签名版 ===== -->
+    <section class="board">
+      <h2>✍️ 签名版</h2>
+      <p class="hint">上榜同学找到自己的卡片,手写签名即为领奖。</p>
+      <div id="signCards" class="sign-grid">
+        <p class="empty">榜单为空,签名版将自动生成。</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== 教师管理面板 ===== -->
+  <div id="adminModal" class="modal" hidden>
+    <div class="modal-box">
+      <button id="btnCloseModal" class="btn btn-close">✕</button>
+      <h2>教师管理</h2>
+      <div id="adminAuth">
+        <label>管理密码</label>
+        <input type="password" id="adminPass" placeholder="请输入密码" />
+        <button id="btnAdminLogin" class="btn btn-primary">解锁</button>
+        <p class="err" id="adminErr" hidden>密码错误</p>
+      </div>
+
+      <div id="adminPanel" hidden>
+        <h3>🏆 总分前三(按名次)</h3>
+        <div id="top3Editor"></div>
+        <button id="btnAddTop3" class="btn btn-add">＋ 添加名字</button>
+
+        <h3>🚀 进步前三(按名次)</h3>
+        <div id="improveEditor"></div>
+        <button id="btnAddImprove" class="btn btn-add">＋ 添加名字</button>
+
+        <div class="save-row">
+          <button id="btnSaveGit" class="btn btn-primary">💾 保存到 GitHub</button>
+          <span class="save-tip">修改榜单后需点此保存,全班才看得到</span>
+        </div>
+
+        <button id="btnLogout" class="btn btn-ghost">退出管理</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 签名绘制弹窗 ===== -->
+  <div id="signModal" class="modal" hidden>
+    <div class="modal-box sign-box">
+      <button id="btnCloseSign" class="btn btn-close">✕</button>
+      <h2>✍️ 手写签名</h2>
+      <p class="sign-name" id="signModalName"></p>
+      <div class="canvas-wrap">
+        <canvas id="signCanvas" width="560" height="240"></canvas>
+        <p class="hint">在框内手写你的名字,点击保存即为领奖</p>
+      </div>
+      <div class="btn-row">
+        <button id="btnClearCanvas" class="btn btn-ghost">清除</button>
+        <button id="btnSaveSign" class="btn btn-primary">✅ 签名领奖</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
