@@ -104,8 +104,33 @@ async function loadFromGitHub() {
   renderAll();
 }
 
-// 写入 GitHub(创建或更新 data.json)
-async function saveToGitHub() {
+// 从 GitHub 拉取最新文件(返回 {draft, sha};文件不存在返回 {draft:null, sha:null})
+async function fetchLatest() {
+  const url = apiBase() + `?ref=${CFG.branch}&ts=${Date.now()}`;
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: { Accept: "application/vnd.github+json", ...authHeaders() },
+  });
+  if (res.status === 404) return { draft: null, sha: null };
+  if (!res.ok) throw new Error("无法读取最新数据(" + res.status + ")");
+  const meta = await res.json();
+  const jsonText = decodeURIComponent(escape(atob(meta.content)));
+  const data = JSON.parse(jsonText);
+  return {
+    draft: {
+      top3: Array.isArray(data.top3) ? data.top3 : [],
+      improve3: Array.isArray(data.improve3) ? data.improve3 : [],
+      group2: Array.isArray(data.group2) ? data.group2 : [],
+      signatures: data.signatures && typeof data.signatures === "object" ? data.signatures : {},
+    },
+    sha: meta.sha,
+  };
+}
+
+// 写入 GitHub:每次先取最新数据 + 最新 sha,合并后提交,冲突自动重试
+// opts.removeSigns: 需要从云端删除的签名名单数组(教师删除签名用)
+async function saveToGitHub(opts) {
+  opts = opts || {};
   if (!gitReady()) {
     alert("未配置 GitHub,请按 README 填写 config.js");
     return;
@@ -120,42 +145,71 @@ async function saveToGitHub() {
 
   try {
     const encoder = new TextEncoder();
-    const utf8 = encoder.encode(JSON.stringify(draft, null, 2));
-    let bin = "";
-    for (const b of utf8) bin += String.fromCharCode(b);
-    const content = btoa(bin);
-
-    // 先查询文件是否存在以获取 sha
-    let sha = null;
-    const head = await fetch(apiBase() + `?ref=${CFG.branch}`, {
-      headers: { Accept: "application/vnd.github+json", ...authHeaders() },
-    });
-    if (head.ok) {
-      const meta = await head.json();
-      sha = meta.sha;
-    }
-
-    const body = {
-      message: "更新光荣榜数据",
-      content,
-      branch: CFG.branch,
+    const encodeDraft = (d) => {
+      const utf8 = encoder.encode(JSON.stringify(d, null, 2));
+      let bin = "";
+      for (const b of utf8) bin += String.fromCharCode(b);
+      return btoa(bin);
     };
-    if (sha) body.sha = sha;
 
-    const res = await fetch(apiBase(), {
-      method: "PUT",
-      headers: { Accept: "application/vnd.github+json", ...authHeaders() },
-      body: JSON.stringify(body),
-    });
+    let succeeded = false;
+    for (let attempt = 0; attempt < 3 && !succeeded; attempt++) {
+      // 1. 取最新数据 + 最新 sha
+      const latest = await fetchLatest();
 
-    if (res.ok) {
-      setStatus("已保存到 GitHub ✅", true);
-      loadFromGitHub();
-    } else {
-      const err = await res.json().catch(() => ({}));
-      const msg = err.message || res.status;
+      // 2. 合并:榜单以本地为准,签名合并(本地覆盖,保留云端其它签名)
+      const merged = {
+        top3: latest.draft ? draft.top3 : draft.top3,
+        improve3: latest.draft ? draft.improve3 : draft.improve3,
+        group2: latest.draft ? draft.group2 : draft.group2,
+        signatures: {},
+      };
+      if (latest.draft && latest.draft.signatures) {
+        Object.assign(merged.signatures, latest.draft.signatures);
+      }
+      Object.assign(merged.signatures, draft.signatures);
+
+      // 移除需要删除的签名(教师删除签名)
+      if (opts.removeSigns && opts.removeSigns.length) {
+        opts.removeSigns.forEach((n) => delete merged.signatures[n]);
+      }
+
+      // 3. 提交
+      const body = {
+        message: "更新光荣榜数据",
+        content: encodeDraft(merged),
+        branch: CFG.branch,
+      };
+      if (latest.sha) body.sha = latest.sha;
+
+      const res = await fetch(apiBase(), {
+        method: "PUT",
+        cache: "no-store",
+        headers: { Accept: "application/vnd.github+json", ...authHeaders() },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        succeeded = true;
+        setStatus("已保存到 GitHub ✅", true);
+        await loadFromGitHub();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        const msg = (err.message || res.status).toLowerCase();
+        const isConflict = res.status === 409 || msg.includes("does not match");
+        if (isConflict) {
+          // sha 冲突,重试(下次会拿到最新 sha)
+          await new Promise((r) => setTimeout(r, 600));
+          continue;
+        }
+        setStatus("保存失败", false);
+        alert("保存失败:" + msg + "\n\n如果是认证失败,请检查 token 是否有 repo 写入权限。");
+        break;
+      }
+    }
+    if (!succeeded) {
       setStatus("保存失败", false);
-      alert("保存失败:" + msg + "\n\n如果是认证失败,请检查 token 是否有 repo 写入权限;若是 sha 冲突,请刷新页面重试。");
+      alert("保存失败:多次提交均被拒绝(数据冲突),请刷新页面后重试。");
     }
   } catch (e) {
     setStatus("保存失败", false);
@@ -409,7 +463,7 @@ els.btnDeleteSign.addEventListener("click", () => {
   }
   if (!confirm(`确定删除「${currentSignName}」的签名吗?`)) return;
   delete draft.signatures[currentSignName];
-  saveToGitHub().then(() => {
+  saveToGitHub({ removeSigns: [currentSignName] }).then(() => {
     els.signModal.hidden = true;
   });
 });
