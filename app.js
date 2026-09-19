@@ -62,7 +62,7 @@ function setStatus(text, ok) {
   els.saveStatus.style.color = ok ? "#27ae60" : "#e74c3c";
 }
 
-// 从 GitHub 拉取数据
+// 从 GitHub 拉取数据(走 API,无 CDN 缓存,永远最新)
 async function loadFromGitHub() {
   if (!gitReady()) {
     setStatus("未配置 GitHub,请在 config.js 填写", false);
@@ -70,19 +70,23 @@ async function loadFromGitHub() {
   }
   setStatus("加载中…", true);
   try {
-    const res = await fetch(
-      `https://raw.githubusercontent.com/${CFG.owner}/${CFG.repo}/${CFG.branch}/${CFG.path}?ts=${Date.now()}`,
-      { cache: "no-store" }
-    );
-    if (!res.ok) {
-      if (res.status === 404) {
-        setStatus("仓库里还没有数据文件", true);
-      } else {
-        setStatus("加载失败(" + res.status + ")", false);
-      }
+    const url = apiBase() + `?ref=${CFG.branch}&ts=${Date.now()}`;
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: { Accept: "application/vnd.github+json", ...authHeaders() },
+    });
+    if (res.status === 404) {
+      setStatus("仓库里还没有数据文件", true);
+      renderAll();
       return;
     }
-    const data = await res.json();
+    if (!res.ok) {
+      setStatus("加载失败(" + res.status + ")", false);
+      return;
+    }
+    const meta = await res.json();
+    const jsonText = decodeURIComponent(escape(atob(meta.content)));
+    const data = JSON.parse(jsonText);
     draft = {
       top3: Array.isArray(data.top3) ? data.top3 : [],
       improve3: Array.isArray(data.improve3) ? data.improve3 : [],
@@ -110,7 +114,11 @@ async function saveToGitHub() {
   setStatus("保存中…", true);
 
   try {
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(draft, null, 2))));
+    const encoder = new TextEncoder();
+    const utf8 = encoder.encode(JSON.stringify(draft, null, 2));
+    let bin = "";
+    for (const b of utf8) bin += String.fromCharCode(b);
+    const content = btoa(bin);
 
     // 先查询文件是否存在以获取 sha
     let sha = null;
@@ -137,6 +145,7 @@ async function saveToGitHub() {
 
     if (res.ok) {
       setStatus("已保存到 GitHub ✅", true);
+      loadFromGitHub();
     } else {
       const err = await res.json().catch(() => ({}));
       const msg = err.message || res.status;
