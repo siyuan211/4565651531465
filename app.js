@@ -14,6 +14,7 @@ const els = {
   saveStatus: $("saveStatus"),
   rankTop3: $("rankTop3"),
   rankImprove: $("rankImprove"),
+  rankGroup: $("rankGroup"),
   signCards: $("signCards"),
   btnAdmin: $("btnAdmin"),
   adminBadge: $("adminBadge"),
@@ -26,8 +27,10 @@ const els = {
   btnCloseModal: $("btnCloseModal"),
   top3Editor: $("top3Editor"),
   improveEditor: $("improveEditor"),
+  groupEditor: $("groupEditor"),
   btnAddTop3: $("btnAddTop3"),
   btnAddImprove: $("btnAddImprove"),
+  btnAddGroup: $("btnAddGroup"),
   btnSaveGit: $("btnSaveGit"),
   btnLogout: $("btnLogout"),
   signModal: $("signModal"),
@@ -35,12 +38,13 @@ const els = {
   signModalName: $("signModalName"),
   signCanvas: $("signCanvas"),
   btnClearCanvas: $("btnClearCanvas"),
+  btnDeleteSign: $("btnDeleteSign"),
   btnSaveSign: $("btnSaveSign"),
 };
 
 // ---------- 应用状态 ----------
 let isAdmin = false;
-let draft = { top3: [], improve3: [], signatures: {} };
+let draft = { top3: [], improve3: [], group2: [], signatures: {} };
 let currentSignName = null;
 let saving = false;
 
@@ -90,6 +94,7 @@ async function loadFromGitHub() {
     draft = {
       top3: Array.isArray(data.top3) ? data.top3 : [],
       improve3: Array.isArray(data.improve3) ? data.improve3 : [],
+      group2: Array.isArray(data.group2) ? data.group2 : [],
       signatures: data.signatures && typeof data.signatures === "object" ? data.signatures : {},
     };
     setStatus("已同步", true);
@@ -161,8 +166,9 @@ async function saveToGitHub() {
 
 // ---------- 渲染 ----------
 function renderAll() {
-  renderRank(els.rankTop3, draft.top3);
-  renderRank(els.rankImprove, draft.improve3);
+  renderRank(els.rankTop3, draft.top3, "top3");
+  renderRank(els.rankImprove, draft.improve3, "improve3");
+  renderRank(els.rankGroup, draft.group2, "group2");
   renderSignCards();
   if (isAdmin) renderEditors();
 }
@@ -170,7 +176,7 @@ function renderAll() {
 const MEDALS = ["🥇", "🥈", "🥉"];
 const MEDAL_BG = ["#f1c40f", "#95a5a6", "#b9770e"];
 
-function renderRank(container, names) {
+function renderRank(container, names, cat) {
   if (!names.length) {
     container.innerHTML = `<li class="empty">暂无数据</li>`;
     return;
@@ -202,14 +208,15 @@ function renderSignCards() {
     .map(({ name, cat }) => {
       const sig = draft.signatures[name];
       const signed = !!sig;
+      const catIcon = cat === "top3" ? "🏆" : cat === "improve3" ? "🚀" : "👥";
       return `<div class="sign-card" data-sign="${escapeAttr(name)}">
-        <div class="card-rank">${cat === "top3" ? "🏆" : "🚀"}</div>
+        <div class="card-rank">${catIcon}</div>
         <div class="card-name">${escapeHtml(name)}</div>
         ${signed
           ? `<img class="sign-preview" src="${sig}" alt="签名" />
-             <span class="signed-tag">✅ 已签名领奖</span>`
-          : `<div class="sign-preview"></div>
-             <span class="signed-tag sign-pending">✍️ 点击签名领奖</span>`}
+             <span class="signed-tag">✅ 已签名</span>`
+          : `<div class="sign-preview"></div>`}
+        <button class="btn ${signed ? "btn-ghost" : "btn-primary"}">${signed ? "✍️ 重新签名" : "✍️ 签名领奖"}</button>
       </div>`;
     })
     .join("");
@@ -223,6 +230,7 @@ function collectHonored() {
   const out = [];
   draft.top3.forEach((n) => n && out.push({ name: n, cat: "top3" }));
   draft.improve3.forEach((n) => n && out.push({ name: n, cat: "improve3" }));
+  draft.group2.forEach((n) => n && out.push({ name: n, cat: "group2" }));
   return out;
 }
 
@@ -265,6 +273,7 @@ els.btnCloseModal.addEventListener("click", () => {
 
 els.btnAddTop3.addEventListener("click", () => addEditorRow("top3", ""));
 els.btnAddImprove.addEventListener("click", () => addEditorRow("improve3", ""));
+els.btnAddGroup.addEventListener("click", () => addEditorRow("group2", ""));
 
 // 保存榜单到 GitHub
 els.btnSaveGit.addEventListener("click", () => {
@@ -274,18 +283,22 @@ els.btnSaveGit.addEventListener("click", () => {
       .filter(Boolean);
   draft.top3 = read(els.top3Editor);
   draft.improve3 = read(els.improveEditor);
+  draft.group2 = read(els.groupEditor);
   saveToGitHub();
 });
 
 function renderEditors() {
   els.top3Editor.innerHTML = "";
   els.improveEditor.innerHTML = "";
+  els.groupEditor.innerHTML = "";
   draft.top3.forEach((n) => addEditorRow("top3", n));
   draft.improve3.forEach((n) => addEditorRow("improve3", n));
+  draft.group2.forEach((n) => addEditorRow("group2", n));
 }
 
 function addEditorRow(cat, value) {
-  const box = cat === "top3" ? els.top3Editor : els.improveEditor;
+  const box =
+    cat === "top3" ? els.top3Editor : cat === "improve3" ? els.improveEditor : els.groupEditor;
   const div = document.createElement("div");
   div.className = "editor-row";
   div.innerHTML = `
@@ -307,6 +320,21 @@ function openSignModal(name) {
   els.signModalName.textContent = `${name} 同学`;
   els.signModal.hidden = false;
   setupCanvas();
+
+  // 已有签名时,显示为浅色底稿,方便重新签名;并显示删除按钮
+  const old = draft.signatures[name];
+  if (old) {
+    const img = new Image();
+    img.onload = () => {
+      ctx.globalAlpha = 0.35;
+      ctx.drawImage(img, 0, 0, els.signCanvas.width, els.signCanvas.height);
+      ctx.globalAlpha = 1;
+    };
+    img.src = old;
+    els.btnDeleteSign.hidden = false;
+  } else {
+    els.btnDeleteSign.hidden = true;
+  }
 }
 
 function setupCanvas() {
@@ -370,6 +398,20 @@ els.btnClearCanvas.addEventListener("click", () => {
   ctx.clearRect(0, 0, els.signCanvas.width, els.signCanvas.height);
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, els.signCanvas.width, els.signCanvas.height);
+});
+
+// 删除已有签名(仅教师可删,防止误删他人签名)
+els.btnDeleteSign.addEventListener("click", () => {
+  if (!currentSignName) return;
+  if (!isAdmin) {
+    alert("只有教师模式可以删除签名,重新签名请在画布上直接重写。");
+    return;
+  }
+  if (!confirm(`确定删除「${currentSignName}」的签名吗?`)) return;
+  delete draft.signatures[currentSignName];
+  saveToGitHub().then(() => {
+    els.signModal.hidden = true;
+  });
 });
 
 els.btnSaveSign.addEventListener("click", () => {
